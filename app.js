@@ -84,13 +84,13 @@ async function relayJSON(target, label){
    Reddit redirects it to the canonical /comments/ URL. */
 async function resolveRedditURL(raw){
   const u=new URL(raw);
-  if(!/(^|\\.)reddit\\.com$/i.test(u.hostname)&&!/(^|\\.)redd\\.it$/i.test(u.hostname))
+  if(!new RegExp('(^|\\.)reddit\\.com$','i').test(u.hostname)&&!new RegExp('(^|\\.)redd\\.it$','i').test(u.hostname))
     throw Error("Please enter a Reddit URL.");
 
-  const comments=u.pathname.match(/\\/comments\\/([a-z0-9]+)/i);
+  const comments=u.pathname.match(new RegExp('/comments/([a-z0-9]+)','i'));
   if(comments)return {postId:comments[1],canonical:raw};
 
-  const share=u.pathname.match(/\\/s\\/([a-z0-9]+)/i);
+  const share=u.pathname.match(new RegExp('/s/([a-z0-9]+)','i'));
   if(!share)throw Error("This does not look like a Reddit post link.");
 
   status("Resolving Reddit share link…","",8);log("This is a Reddit /s/ share link. Resolving it to the real post…");
@@ -100,7 +100,7 @@ async function resolveRedditURL(raw){
 
   // AllOrigins normally exposes the final URL in `url`; if not, find the
   // canonical Reddit URL in the returned HTML.
-  if(!/\\/comments\\/([a-z0-9]+)/i.test(finalURL)){
+  if(!new RegExp('/comments/([a-z0-9]+)','i').test(finalURL)){
     const html=String(resolved.raw||"");
     const patterns=[
       /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i,
@@ -110,7 +110,7 @@ async function resolveRedditURL(raw){
       const m=html.match(re);if(m){finalURL=m[1];break;}
     }
   }
-  const m=finalURL.match(/\\/comments\\/([a-z0-9]+)/i);
+  const m=finalURL.match(new RegExp('/comments/([a-z0-9]+)','i'));
   if(!m)throw Error("Reddit share link could not be resolved. Try opening the link in your browser once, then copy the resulting Reddit URL.");
   log(`Resolved to Reddit post ID ${m[1]}`);
   return {postId:m[1],canonical:finalURL};
