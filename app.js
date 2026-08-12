@@ -1,203 +1,170 @@
 /*
- Reddit Extractor - GitHub Pages + Jina Reader.
- No Cloudflare. No Reddit credentials. No API key.
+ GitHub-only Reddit Extractor.
 
- Jina Reader documents the URL-reader pattern:
- https://r.jina.ai/<target-url>
+ One request:
+ Browser -> Jina Reader -> Reddit
 
- This version asks Jina to fetch Reddit's JSON listing rather than trying
- to make the browser call reddit.com directly.
+ No Cloudflare, no Reddit credentials, no API_BASE.
+
+ Jina Reader supports ReaderLM-v2 plus x-instruction/x-json-schema for
+ structured extraction. We ask it to return a Reddit post and the comments
+ it can see. If structured extraction fails, we fall back to normal Reader
+ text and show the returned data instead of silently failing.
 */
 
 const JINA="https://r.jina.ai/";
 let currentData=null;
 const $=id=>document.getElementById(id);
 
+const schema={
+  type:"object",
+  properties:{
+    title:{type:"string"},
+    subreddit:{type:"string"},
+    author:{type:"string"},
+    score:{type:"number"},
+    post_body:{type:"string"},
+    post_url:{type:"string"},
+    comments:{
+      type:"array",
+      items:{
+        type:"object",
+        properties:{
+          id:{type:"string"},
+          author:{type:"string"},
+          score:{type:"number"},
+          body:{type:"string"},
+          permalink:{type:"string"},
+          replies:{
+            type:"array",
+            items:{
+              type:"object",
+              properties:{
+                id:{type:"string"},
+                author:{type:"string"},
+                score:{type:"number"},
+                body:{type:"string"},
+                permalink:{type:"string"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));}
 function setStatus(text,count="",pct=5,error=false){
-  $("status").hidden=false;
-  $("statusText").textContent=text;
-  $("statusText").className=error?"error":"";
-  $("statusCount").textContent=count;
-  $("barFill").style.width=Math.max(2,Math.min(100,pct))+"%";
+  $("status").hidden=false;$("statusText").textContent=text;$("statusText").className=error?"error":"";
+  $("statusCount").textContent=count;$("barFill").style.width=Math.max(2,Math.min(100,pct))+"%";
 }
-function log(text){
-  const x=document.createElement("div");x.textContent="• "+text;
-  $("log").appendChild(x);$("log").scrollTop=$("log").scrollHeight;
-}
+function log(text){const x=document.createElement("div");x.textContent="• "+text;$("log").appendChild(x);$("log").scrollTop=$("log").scrollHeight;}
 function flatten(nodes,out=[]){for(const c of nodes||[]){out.push(c);flatten(c.replies,out)}return out;}
 
-function isRedditUrl(raw){
-  try{
-    const u=new URL(raw);
-    return /(^|\.)reddit\.com$/i.test(u.hostname)||/(^|\.)redd\.it$/i.test(u.hostname);
-  }catch{return false}
-}
-
-function findPostId(text){
-  const m=String(text).match(/\/comments\/([a-z0-9]+)/i);
-  return m?m[1]:null;
-}
-
-/*
- Fetch any target through Jina Reader.
- Jina's documented reader endpoint is r.jina.ai/<URL>.
- */
-async function jina(target, label, percent){
-  const endpoint=JINA+target;
-  setStatus(label||"Fetching…","",percent||10);
-  log("Jina Reader: "+(label||"fetching"));
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),30000);
-  try{
-    const r=await fetch(endpoint,{
-      method:"GET",
-      headers:{"Accept":"text/plain"}
-    });
-    if(!r.ok) throw new Error(`Jina Reader HTTP ${r.status}`);
-    const text=await r.text();
-    if(!text.trim()) throw new Error("Jina returned an empty response.");
-    return text;
-  }finally{
-    clearTimeout(timer);
+function normalizeData(d,sourceUrl){
+  const comments=Array.isArray(d.comments)?d.comments:[];
+  function clean(c){
+    return {
+      id:c.id||"",
+      parent_id:c.parent_id||"",
+      author:c.author||"[deleted]",
+      body:c.body||"",
+      score:Number.isFinite(Number(c.score))?Number(c.score):0,
+      permalink:c.permalink||"",
+      replies:Array.isArray(c.replies)?c.replies.map(clean):[]
+    };
   }
-}
-
-/*
- Reddit /s/ links redirect. Instead of trying to perform a browser redirect,
- ask Jina to read the share URL and search the returned content for the
- canonical /comments/<id> URL.
- */
-async function resolveShare(raw){
-  setStatus("Resolving Reddit share link…","",8);
-  log("Detected Reddit /s/ share link.");
-  const text=await jina(raw,"Resolving Reddit share link…",10);
-  const id=findPostId(text);
-  if(id){
-    log("Resolved post ID: "+id);
-    return id;
-  }
-
-  // Sometimes the reader response may expose the canonical URL as plain text.
-  const decoded=text.replace(/\\u002F/g,"/");
-  const id2=findPostId(decoded);
-  if(id2){
-    log("Resolved post ID: "+id2);
-    return id2;
-  }
-
-  throw new Error("Jina could not expose the canonical post ID from this Reddit share link. Try the same link after opening it once in Reddit and copying the resulting URL.");
-}
-
-async function resolvePost(raw){
-  const u=new URL(raw);
-  const m=u.pathname.match(/\/comments\/([a-z0-9]+)/i);
-  if(m)return m[1];
-  const share=u.pathname.match(/\/s\/([a-z0-9]+)/i);
-  if(share)return await resolveShare(raw);
-  throw new Error("Use a Reddit post URL or Reddit /s/ share URL.");
-}
-
-/*
- We request Reddit's JSON listing THROUGH Jina.
- This avoids browser CORS against reddit.com.
- */
-async function fetchRedditJSON(postId){
-  const target=`https://www.reddit.com/comments/${postId}.json?raw_json=1&limit=500&depth=10&sort=top`;
-  const text=await jina(target,"Fetching Reddit post and comments…",25);
-
-  // Jina can return the JSON as plain text. Find the first JSON object/array.
-  const start=Math.min(
-    ...["[","{"].map(ch=>{const i=text.indexOf(ch);return i<0?Infinity:i})
-  );
-  if(!Number.isFinite(start)) throw new Error("Jina returned text instead of Reddit JSON.");
-
-  const candidate=text.slice(start).trim();
-  try{return JSON.parse(candidate)}catch{}
-
-  // Handle markdown code fences if the reader wrapped the JSON.
-  const fenced=candidate.replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"").trim();
-  try{return JSON.parse(fenced)}catch{}
-
-  throw new Error("Could not parse Reddit's JSON response returned by Jina.");
-}
-
-function normalizeComment(x){
-  const d=x.data;
   return {
-    id:d.id,parent_id:d.parent_id,author:d.author,body:d.body||"",score:d.score??0,
-    created_utc:d.created_utc,
-    created_utc_text:d.created_utc?new Date(d.created_utc*1000).toISOString():"",
-    permalink:d.permalink?`https://www.reddit.com${d.permalink}`:"",
-    replies:[]
+    ok:true,
+    post:{
+      id:(sourceUrl.match(/\/comments\/([a-z0-9]+)/i)||[])[1]||"",
+      title:d.title||"Untitled Reddit post",
+      body:d.post_body||"",
+      author:d.author||"[unknown]",
+      subreddit:d.subreddit||"",
+      score:Number.isFinite(Number(d.score))?Number(d.score):0,
+      permalink:d.post_url||sourceUrl
+    },
+    comments:comments.map(clean)
   };
 }
 
-function parseListing(data){
-  if(!Array.isArray(data)||!data[0]||!data[1])throw new Error("Reddit JSON did not contain a post and comment listing.");
-  const post=data[0]?.data?.children?.[0]?.data;
-  if(!post)throw new Error("Reddit post was not found or is inaccessible.");
+async function structuredReader(target){
+  const endpoint=JINA+target;
+  const schemaHeader=JSON.stringify(schema);
+  const instruction=`Extract the Reddit post from this page. Return ONLY the requested JSON object. Include the post title, subreddit, author, score, full post body, canonical post URL, and as many Reddit comments as are actually present in the fetched page. For each comment include author, score, body, permalink, and direct replies when visible. Do not invent comments or text. Preserve the exact comment text as closely as possible. If a value is unavailable, use an empty string or 0.`;
 
-  const roots=[],map=new Map(),more=[];
-  function ingest(list){
-    for(const x of list||[]){
-      if(x.kind==="t1"){
-        const c=normalizeComment(x);
-        map.set(c.id,c);
-        const parent=(c.parent_id||"").replace(/^t[01]_?/,"");
-        const p=map.get(parent);
-        if(p)p.replies.push(c);else roots.push(c);
-        ingest(x.data?.replies?.data?.children);
-      }else if(x.kind==="more"){
-        for(const id of x.data?.children||[])more.push(id);
-      }
-    }
-  }
-  ingest(data[1]?.data?.children||[]);
-  return {post,roots,map,more};
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),45000);
+  try{
+    const r=await fetch(endpoint,{
+      method:"GET",
+      headers:{
+        "Accept":"application/json",
+        "x-respond-with":"readerlm-v2",
+        "x-json-schema":schemaHeader,
+        "x-instruction":instruction
+      },
+      signal:controller.signal
+    });
+    if(!r.ok)throw new Error(`Jina HTTP ${r.status}`);
+    const text=await r.text();
+    return text;
+  }finally{clearTimeout(timer)}
 }
 
-async function expandMore(postId,more,roots,map){
-  /*
-   Jina can fetch Reddit's morechildren endpoint too. We do a limited number
-   of batches so a huge thread cannot run forever.
-  */
-  let batchNo=0;
-  const maxBatches=20;
-  while(more.length&&batchNo<maxBatches){
-    const batch=more.splice(0,100);batchNo++;
-    setStatus("Extracting comment replies…",`${map.size.toLocaleString()} comments`,40+Math.min(50,batchNo*2));
-    log(`Fetching reply batch ${batchNo} (${batch.length} IDs)`);
-
-    try{
-      const target=`https://www.reddit.com/api/morechildren.json?api_type=json&raw_json=1&link_id=t3_${postId}&children=${encodeURIComponent(batch.join(","))}&sort=top`;
-      const text=await jina(target,`Extracting replies — batch ${batchNo}…`,40+Math.min(50,batchNo*2));
-      const start=text.indexOf("{");
-      if(start<0)throw new Error("No JSON returned for this reply batch.");
-      let d;
-      try{d=JSON.parse(text.slice(start).trim())}catch{
-        d=JSON.parse(text.slice(start).trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,""));
-      }
-      const things=d?.json?.data?.things||[];
-      for(const x of things){
-        if(x.kind!=="t1")continue;
-        const c=normalizeComment(x);map.set(c.id,c);
-        const parent=(c.parent_id||"").replace(/^t[01]_?/,"");
-        const p=map.get(parent);
-        if(p)p.replies.push(c);else roots.push(c);
-      }
-      log(`Batch ${batchNo} complete — ${map.size.toLocaleString()} comments total`);
-    }catch(e){
-      log(`Reply expansion stopped: ${e.message}`);
-      break;
-    }
+function parsePossibleJSON(text){
+  let t=String(text||"").trim();
+  try{return JSON.parse(t)}catch{}
+  const first=t.indexOf("{"),last=t.lastIndexOf("}");
+  if(first>=0&&last>first){
+    try{return JSON.parse(t.slice(first,last+1))}catch{}
   }
-  if(more.length)log("Some 'more comments' remained after the safety limit.");
+  return null;
+}
+
+async function normalReader(target){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),45000);
+  try{
+    const r=await fetch(JINA+target,{headers:{Accept:"text/plain"},signal:controller.signal});
+    if(!r.ok)throw new Error(`Jina HTTP ${r.status}`);
+    return await r.text();
+  }finally{clearTimeout(timer)}
+}
+
+function parseMarkdownFallback(text,sourceUrl){
+  /*
+   Conservative fallback. We don't invent structure. We display the Reader
+   text as one "raw extraction" and also try to identify a title.
+  */
+  const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  let title="";
+  for(const line of lines){
+    if(/^#\s+/.test(line)){title=line.replace(/^#+\s+/,"").trim();break}
+  }
+  if(!title && lines.length) title=lines[0].replace(/^\*+|\*+$/g,"").trim();
+
+  return {
+    ok:true,
+    fallback:true,
+    post:{
+      id:(sourceUrl.match(/\/comments\/([a-z0-9]+)/i)||[])[1]||"",
+      title:title||"Reddit extraction",
+      body:text,
+      author:"",
+      subreddit:"",
+      score:0,
+      permalink:sourceUrl
+    },
+    comments:[]
+  };
 }
 
 function renderComment(c){
   return `<div class="comment">
-    <div class="comment-meta"><b>${esc(c.author||"[deleted]")}</b> · ${c.score??0} points · ${esc(c.created_utc_text||"")}</div>
+    <div class="comment-meta"><b>${esc(c.author||"[deleted]")}</b> · ${c.score??0} points</div>
     <div class="comment-body">${c.body?esc(c.body):'<span class="deleted">[deleted]</span>'}</div>
     ${c.replies?.length?`<div class="children">${c.replies.map(renderComment).join("")}</div>`:""}
   </div>`;
@@ -207,75 +174,82 @@ function render(data){
   currentData=data;
   const all=flatten(data.comments);
   $("results").hidden=false;$("actions").hidden=false;
-  $("commentCount").textContent=`${all.length.toLocaleString()} extracted`;
+  $("commentCount").textContent=data.fallback
+    ?"Reader text returned"
+    :`${all.length.toLocaleString()} extracted`;
   $("post").innerHTML=`
     <div class="post-title">${esc(data.post.title)}</div>
-    <div class="meta">r/${esc(data.post.subreddit)} · u/${esc(data.post.author||"[deleted]")} · ${data.post.score??0} points · ${esc(data.post.created_utc_text||"")}</div>
+    <div class="meta">${data.post.subreddit?"r/"+esc(data.post.subreddit)+" · ":""}${data.post.author?"u/"+esc(data.post.author)+" · ":""}${data.post.score||0} points</div>
     <div class="body">${data.post.body?esc(data.post.body):'<span class="deleted">[no post body]</span>'}</div>`;
-  $("comments").innerHTML=data.comments.length
-    ?data.comments.map(renderComment).join("")
-    :"<div>No comments returned.</div>";
+  if(data.fallback){
+    $("comments").innerHTML=`<div><b>Raw Reader content</b><p class="meta">The page was fetched successfully, but structured comment extraction was unavailable. You can still copy/download the returned data.</p><div class="raw">${esc(data.post.body)}</div></div>`;
+  }else{
+    $("comments").innerHTML=data.comments.length
+      ?data.comments.map(renderComment).join("")
+      :"<div>No structured comments were returned by the reader.</div>";
+  }
 }
 
 async function extract(){
   const raw=$("url").value.trim();
   $("results").hidden=true;$("actions").hidden=true;$("log").innerHTML="";
   if(!raw){setStatus("Paste a Reddit post URL first","",0,true);return}
-  if(!isRedditUrl(raw)){setStatus("That is not a Reddit URL.","",0,true);return}
+  let u;
+  try{u=new URL(raw)}catch{setStatus("Invalid URL.","",0,true);return}
+  if(!/(^|\.)reddit\.com$/i.test(u.hostname)&&!/(^|\.)redd\.it$/i.test(u.hostname)){
+    setStatus("Please enter a Reddit URL.","",0,true);return
+  }
 
   $("extract").disabled=true;
   try{
-    setStatus("Starting…","",3);log("Starting extraction");
-    const postId=await resolvePost(raw);
-    log("Post ID: "+postId);
+    setStatus("Opening Reddit through Reader…","",10);
+    log("Sending the Reddit URL to Jina Reader.");
+    if(/\/s\/[a-z0-9]+/i.test(u.pathname)) log("Reddit /s/ share link detected — Reader will follow the page redirect.");
 
-    const listing=await fetchRedditJSON(postId);
-    setStatus("Reading post and initial comments…","",35);
-    const parsed=parseListing(listing);
-    log("Post found: "+parsed.post.title);
-    log(`${parsed.map.size.toLocaleString()} comments in initial response`);
+    setStatus("Extracting post and comments…","",35);
+    const rawResponse=await structuredReader(raw);
+    log("Reader returned a structured response.");
 
-    await expandMore(postId,parsed.more,parsed.roots,parsed.map);
+    let parsed=parsePossibleJSON(rawResponse);
+    if(parsed && parsed.data && typeof parsed.data==="object") parsed=parsed.data;
 
-    const p=parsed.post;
-    const result={
-      ok:true,
-      post:{
-        id:p.id,title:p.title,body:p.selftext||"",author:p.author,
-        subreddit:p.subreddit,score:p.score,created_utc:p.created_utc,
-        created_utc_text:p.created_utc?new Date(p.created_utc*1000).toISOString():"",
-        permalink:`https://www.reddit.com${p.permalink||""}`
-      },
-      comments:parsed.roots
-    };
-    render(result);
-    const total=flatten(result.comments).length;
-    setStatus("Done",`${total.toLocaleString()} comments`,100);
-    log(`Extraction complete — ${total.toLocaleString()} comments`);
+    if(parsed && (parsed.title!==undefined || parsed.comments!==undefined)){
+      const result=normalizeData(parsed,raw);
+      render(result);
+      const total=flatten(result.comments).length;
+      setStatus("Done",`${total.toLocaleString()} comments extracted`,100);
+      log(`Finished — ${total.toLocaleString()} structured comments returned.`);
+    }else{
+      log("Structured response could not be parsed. Falling back to normal Reader text.");
+      setStatus("Fetching readable Reddit content…","",60);
+      const text=await normalReader(raw);
+      const fallback=parseMarkdownFallback(text,raw);
+      render(fallback);
+      setStatus("Done","Raw page data extracted",100);
+      log("The page data was extracted, but Reddit did not expose a structured comment list.");
+    }
   }catch(e){
     console.error(e);
     setStatus("Extraction failed","",0,true);
-    log(e.name==="AbortError"?"Jina Reader timed out after 30 seconds.":(e.message||"Unknown error"));
-  }finally{
-    $("extract").disabled=false;
-  }
+    if(e.name==="AbortError") log("Reader timed out after 45 seconds.");
+    else log(e.message||"Unknown error");
+  }finally{$("extract").disabled=false}
 }
 
 function download(name,text,type){
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(new Blob([text],{type}));
-  a.download=name;a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));
+  a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 function csvEsc(v){return `"${String(v??"").replace(/"/g,'""')}"`}
 function makeCSV(d){
-  const rows=[["type","id","parent_id","author","score","created_utc","permalink","body","depth"]];
-  rows.push(["post",d.post.id,"",d.post.author,d.post.score,d.post.created_utc,d.post.permalink,d.post.body,""]);
+  const rows=[["type","id","parent_id","author","score","permalink","body","depth"]];
+  rows.push(["post",d.post.id,"",d.post.author,d.post.score,d.post.permalink,d.post.body,""]);
   const walk=(nodes,depth)=>{for(const c of nodes||[]){
-    rows.push(["comment",c.id,c.parent_id,c.author,c.score,c.created_utc,c.permalink,c.body,depth]);
+    rows.push(["comment",c.id,c.parent_id,c.author,c.score,c.permalink,c.body,depth]);
     walk(c.replies,depth+1);
   }};
   walk(d.comments,0);
+  if(d.fallback) rows.push(["raw","","","","","","Reader returned raw content; see JSON export.",0]);
   return rows.map(r=>r.map(csvEsc).join(",")).join("\n");
 }
 
@@ -287,9 +261,9 @@ $("copy").addEventListener("click",async()=>{
   catch{log("Clipboard permission denied — use Download JSON.")}
 });
 $("json").addEventListener("click",()=>currentData&&download(
-  `reddit-${currentData.post.id}.json`,JSON.stringify(currentData,null,2),"application/json"
+  `reddit-${currentData.post.id||"extract"}.json`,JSON.stringify(currentData,null,2),"application/json"
 ));
 $("csv").addEventListener("click",()=>currentData&&download(
-  `reddit-${currentData.post.id}.csv`,makeCSV(currentData),"text/csv"
+  `reddit-${currentData.post.id||"extract"}.csv`,makeCSV(currentData),"text/csv"
 ));
-console.log("Reddit Extractor Jina version loaded.");
+console.log("Reddit Extractor GitHub-only final loaded.");

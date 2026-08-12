@@ -17,4 +17,5 @@ h1{font-size:38px;margin:0 0 8px;font-weight:750}.sub{margin:0 0 28px;color:#666
 .comment{padding:13px 0 13px 15px;border-left:2px solid #e6e6e6;margin:3px 0}
 .comment-meta{font-size:12px;color:#777}.comment-body{white-space:pre-wrap;line-height:1.5;margin-top:6px}.children{margin-left:18px}
 .deleted{color:#999;font-style:italic}.error{color:#b00020}
+.raw{white-space:pre-wrap;max-height:600px;overflow:auto;background:#fafafa;padding:15px;border-radius:8px;font-size:13px;line-height:1.5}
 @media(max-width:650px){.wrap{margin-top:35px}.search-row{flex-direction:column}.search-row button{height:45px}.actions{flex-wrap:wrap}}
