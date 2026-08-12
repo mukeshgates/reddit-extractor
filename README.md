@@ -1,17 +1,13 @@
-# Reddit Extractor — GitHub-only version
+# Reddit Extractor Final - GitHub only
 
-This version requires ONLY GitHub Pages.
+Upload/replace `index.html`, `style.css`, and `app.js` in your GitHub Pages repository.
 
-Upload these files to the root of your repository:
-- index.html
-- style.css
-- app.js
+This version accepts:
+- normal Reddit links: `/comments/POSTID/...`
+- Reddit app share links: `/r/subreddit/s/SHARECODE`
 
-No Cloudflare Worker and no API credentials.
+No Cloudflare Worker, no Reddit client ID, no secret, no refresh token.
 
-IMPORTANT:
-Reddit has tightened unauthenticated public API access. Direct `.json` requests can return 403. This version tries the direct Reddit endpoint and then two public CORS proxy services. Those services are outside your GitHub repository and may be rate-limited or stop working.
+The `/s/` link is a real Reddit share-link format; the share code is not the post ID. Reddit redirects the share link to the canonical post URL, so this version first resolves the redirect and then extracts the post/comments. 
 
-If all methods fail, the page shows the reason instead of hanging.
-
-For reliable long-term extraction of all comments, an authorized Reddit API/server-side service is required.
+Because GitHub Pages is browser-only, requests are sent through public CORS relays. Those relays can be rate-limited or unavailable. The UI shows progress and errors instead of hanging.
