@@ -1,33 +1,17 @@
-# Reddit Extractor V3
+# Reddit Extractor — GitHub-only version
 
-This version keeps the simple V1 UI and adds live extraction progress.
+This version requires ONLY GitHub Pages.
 
-## GitHub Pages
-Replace `index.html`, `style.css`, and `app.js` in your existing repository.
+Upload these files to the root of your repository:
+- index.html
+- style.css
+- app.js
 
-In `app.js`, replace:
-`https://YOUR-WORKER.workers.dev`
-with your actual Worker URL.
+No Cloudflare Worker and no API credentials.
 
-## Cloudflare Worker
-Deploy `worker.js` as your Worker.
+IMPORTANT:
+Reddit has tightened unauthenticated public API access. Direct `.json` requests can return 403. This version tries the direct Reddit endpoint and then two public CORS proxy services. Those services are outside your GitHub repository and may be rate-limited or stop working.
 
-Secrets:
-- REDDIT_CLIENT_ID
-- REDDIT_CLIENT_SECRET
-- REDDIT_REFRESH_TOKEN
-- REDDIT_USER_AGENT
+If all methods fail, the page shows the reason instead of hanging.
 
-Variable:
-- CORS_ALLOWED_ORIGIN = https://mukeshgates.github.io
-
-The Worker streams NDJSON progress events, so the page shows:
-- Validating URL
-- Authenticating
-- Fetching post/comments
-- Initial comments loaded
-- Expanding comment replies
-- Comments extracted so far
-- Done / error
-
-The 100 expansion-batch safety cap prevents a huge thread from hanging forever. Increase it if you deliberately want very large threads.
+For reliable long-term extraction of all comments, an authorized Reddit API/server-side service is required.

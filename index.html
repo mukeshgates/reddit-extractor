@@ -16,10 +16,13 @@
     <button id="extract">Extract</button>
   </div>
 
-  <div id="progress" class="progress" hidden>
-    <div class="progress-title"><span id="progressText">Starting…</span><span id="progressCount"></span></div>
+  <div id="status" class="status" hidden>
+    <div class="status-line">
+      <span id="statusText">Starting…</span>
+      <span id="statusCount"></span>
+    </div>
     <div class="bar"><div id="barFill"></div></div>
-    <div id="log" class="log"></div>
+    <div id="log"></div>
   </div>
 
   <div id="actions" class="actions" hidden>
@@ -30,7 +33,10 @@
 
   <section id="results" hidden>
     <article id="post" class="card"></article>
-    <div class="comments-title"><h2>Comments</h2><span id="commentCount"></span></div>
+    <div class="comments-title">
+      <h2>Comments</h2>
+      <span id="commentCount"></span>
+    </div>
     <div id="comments" class="card"></div>
   </section>
 </main>
