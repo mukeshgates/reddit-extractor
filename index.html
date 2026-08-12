@@ -1,50 +1,39 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Reddit Extractor</title>
-  <link rel="stylesheet" href="./style.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reddit Extractor</title>
+<link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <main class="wrap">
-    <header>
-      <div class="eyebrow">REDDIT TOOL</div>
-      <h1>Reddit Extractor</h1>
-      <p>Paste a Reddit post URL to extract the post and its comment tree.</p>
-    </header>
+<main class="wrap">
+  <h1>Reddit Extractor</h1>
+  <p class="sub">Paste a Reddit post URL to extract the post and comments.</p>
 
-    <section class="card">
-      <label for="url">Reddit post URL</label>
-      <div class="inputrow">
-        <input id="url" type="url" spellcheck="false"
-          placeholder="https://www.reddit.com/r/AskReddit/comments/.../">
-        <button id="extract">Extract</button>
-      </div>
-      <div id="status" class="status"></div>
-    </section>
+  <div class="search-row">
+    <input id="url" type="url" placeholder="https://www.reddit.com/r/.../comments/.../" autocomplete="off">
+    <button id="extract">Extract</button>
+  </div>
 
-    <section id="results" hidden>
-      <div class="toolbar">
-        <div id="summary"></div>
-        <div class="buttons">
-          <button id="copy">Copy JSON</button>
-          <button id="json">Download JSON</button>
-          <button id="csv">Download CSV</button>
-        </div>
-      </div>
+  <div id="progress" class="progress" hidden>
+    <div class="progress-title"><span id="progressText">Starting…</span><span id="progressCount"></span></div>
+    <div class="bar"><div id="barFill"></div></div>
+    <div id="log" class="log"></div>
+  </div>
 
-      <article id="post" class="card"></article>
+  <div id="actions" class="actions" hidden>
+    <button id="copy">Copy JSON</button>
+    <button id="json">Download JSON</button>
+    <button id="csv">Download CSV</button>
+  </div>
 
-      <section class="card">
-        <div class="commentsHead">
-          <h2>Comments</h2>
-          <input id="search" placeholder="Search comments...">
-        </div>
-        <div id="comments"></div>
-      </section>
-    </section>
-  </main>
-  <script src="./app.js"></script>
+  <section id="results" hidden>
+    <article id="post" class="card"></article>
+    <div class="comments-title"><h2>Comments</h2><span id="commentCount"></span></div>
+    <div id="comments" class="card"></div>
+  </section>
+</main>
+<script src="./app.js"></script>
 </body>
 </html>
