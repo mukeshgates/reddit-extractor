@@ -1,26 +1,28 @@
-# Reddit Extractor Final - GitHub only
+# Reddit Extractor — Jina Reader version
 
-Upload/replace `index.html`, `style.css`, and `app.js` in your GitHub Pages repository.
+## What to upload
+Replace these three files in your GitHub Pages repository:
+- index.html
+- style.css
+- app.js
 
-This version accepts:
-- normal Reddit links: `/comments/POSTID/...`
-- Reddit app share links: `/r/subreddit/s/SHARECODE`
+No Cloudflare Worker and no Reddit credentials are required.
 
-No Cloudflare Worker, no Reddit client ID, no secret, no refresh token.
+## How it works
+The browser sends the Reddit URL to Jina Reader:
+`https://r.jina.ai/<reddit-url>`
 
-The `/s/` link is a real Reddit share-link format; the share code is not the post ID. Reddit redirects the share link to the canonical post URL, so this version first resolves the redirect and then extracts the post/comments. 
+Jina documents this Reader URL pattern and currently lists a no-API-key rate limit for Reader. Higher limits can use an API key, but this project does not require one.
 
-Because GitHub Pages is browser-only, requests are sent through public CORS relays. Those relays can be rate-limited or unavailable. The UI shows progress and errors instead of hanging.
+The app then:
+1. accepts normal `/comments/<post-id>/` links
+2. accepts Reddit `/s/<share-code>` links
+3. resolves the `/s/` link through Reader
+4. requests Reddit's JSON listing through Reader
+5. extracts the post and comments
+6. attempts to expand Reddit `more` comment batches
+7. displays progress
+8. exports JSON/CSV
 
-
-## If the browser still shows `Cannot set properties of null (setting 'oninput')`
-
-That error is from an older `app.js` that expected an element with id `search`.
-This fixed version does not use that element at all.
-
-After uploading, do a hard refresh:
-- Windows Chrome: Ctrl + Shift + R
-- Or open the site in an Incognito window.
-
-You should see in DevTools Console:
-`Reddit Extractor: 2026-08-13-github-only-fixed`
+## Important limitation
+This is still a GitHub Pages-only browser application. It depends on Jina Reader being able to fetch Reddit and on Reddit returning the JSON data to the reader. Deleted/removed comments and comments unavailable to the source cannot be recovered. Very large threads can also hit rate/response limits.
