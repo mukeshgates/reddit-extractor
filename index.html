@@ -1,1 +1,50 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reddit Extractor</title><link rel="stylesheet" href="style.css"></head><body><main><h1>Reddit Extractor</h1><p class="sub">Paste a Reddit post URL to extract the post and comments.</p><div class="row"><input id="url" placeholder="https://www.reddit.com/r/.../comments/.../"><button id="extract">Extract</button></div><p id="status"></p><section id="post"></section><section id="comments"></section><div id="actions" hidden><button id="json">Copy JSON</button><button id="download">Download JSON</button><button id="csv">Download CSV</button></div></main><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Reddit Extractor</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div class="eyebrow">REDDIT TOOL</div>
+      <h1>Reddit Extractor</h1>
+      <p>Paste a Reddit post URL to extract the post and its comment tree.</p>
+    </header>
+
+    <section class="card">
+      <label for="url">Reddit post URL</label>
+      <div class="inputrow">
+        <input id="url" type="url" spellcheck="false"
+          placeholder="https://www.reddit.com/r/AskReddit/comments/.../">
+        <button id="extract">Extract</button>
+      </div>
+      <div id="status" class="status"></div>
+    </section>
+
+    <section id="results" hidden>
+      <div class="toolbar">
+        <div id="summary"></div>
+        <div class="buttons">
+          <button id="copy">Copy JSON</button>
+          <button id="json">Download JSON</button>
+          <button id="csv">Download CSV</button>
+        </div>
+      </div>
+
+      <article id="post" class="card"></article>
+
+      <section class="card">
+        <div class="commentsHead">
+          <h2>Comments</h2>
+          <input id="search" placeholder="Search comments...">
+        </div>
+        <div id="comments"></div>
+      </section>
+    </section>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>
