@@ -13,7 +13,9 @@
 */
 
 let currentData=null;
+const APP_VERSION="2026-08-13-github-only-fixed";
 const $=id=>document.getElementById(id);
+console.log("Reddit Extractor:", APP_VERSION);
 
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));}
 function status(text,count="",pct=5,error=false){
@@ -195,8 +197,23 @@ function makeCSV(d){
   const walk=(nodes,depth)=>{for(const c of nodes||[]){rows.push(["comment",c.id,c.parent_id,c.author,c.score,c.created_utc,c.permalink,c.body,depth]);walk(c.replies,depth+1)}};
   walk(d.comments,0);return rows.map(r=>r.map(csvEsc).join(",")).join("\\n");
 }
-$("extract").onclick=extract;
-$("url").addEventListener("keydown",e=>{if(e.key==="Enter")extract()});
-$("copy").onclick=async()=>{if(currentData){await navigator.clipboard.writeText(JSON.stringify(currentData,null,2));log("JSON copied to clipboard")}};
-$("json").onclick=()=>currentData&&download(`reddit-${currentData.post.id}.json`,JSON.stringify(currentData,null,2),"application/json");
-$("csv").onclick=()=>currentData&&download(`reddit-${currentData.post.id}.csv`,makeCSV(currentData),"text/csv");
+const extractButton=$("extract");
+const urlInput=$("url");
+const copyButton=$("copy");
+const jsonButton=$("json");
+const csvButton=$("csv");
+
+if(extractButton) extractButton.addEventListener("click",extract);
+if(urlInput) urlInput.addEventListener("keydown",e=>{if(e.key==="Enter")extract()});
+if(copyButton) copyButton.addEventListener("click",async()=>{
+  if(currentData){
+    try{await navigator.clipboard.writeText(JSON.stringify(currentData,null,2));log("JSON copied to clipboard");}
+    catch(e){log("Clipboard permission denied — use Download JSON instead.");}
+  }
+});
+if(jsonButton) jsonButton.addEventListener("click",()=>currentData&&download(
+  `reddit-${currentData.post.id}.json`,JSON.stringify(currentData,null,2),"application/json"
+));
+if(csvButton) csvButton.addEventListener("click",()=>currentData&&download(
+  `reddit-${currentData.post.id}.csv`,makeCSV(currentData),"text/csv"
+));
