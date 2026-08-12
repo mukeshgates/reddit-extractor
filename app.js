@@ -1,58 +1,19 @@
 /*
- GitHub-only Reddit Extractor.
+ Reddit Extractor - GitHub Pages only.
 
- One request:
- Browser -> Jina Reader -> Reddit
+ This version deliberately does NOT use Reddit's .json endpoints.
+ Reddit shut down unauthenticated JSON access in 2026, so this version uses
+ Reddit's public RSS representation of a post through a browser CORS proxy.
 
- No Cloudflare, no Reddit credentials, no API_BASE.
+ Flow:
+   GitHub Pages -> CorsProxy.io -> Reddit .rss
 
- Jina Reader supports ReaderLM-v2 plus x-instruction/x-json-schema for
- structured extraction. We ask it to return a Reddit post and the comments
- it can see. If structured extraction fails, we fall back to normal Reader
- text and show the returned data instead of silently failing.
+ No Cloudflare. No Reddit credentials. No API key.
 */
 
-const JINA="https://r.jina.ai/";
+const PROXY="https://corsproxy.io/?url=";
 let currentData=null;
 const $=id=>document.getElementById(id);
-
-const schema={
-  type:"object",
-  properties:{
-    title:{type:"string"},
-    subreddit:{type:"string"},
-    author:{type:"string"},
-    score:{type:"number"},
-    post_body:{type:"string"},
-    post_url:{type:"string"},
-    comments:{
-      type:"array",
-      items:{
-        type:"object",
-        properties:{
-          id:{type:"string"},
-          author:{type:"string"},
-          score:{type:"number"},
-          body:{type:"string"},
-          permalink:{type:"string"},
-          replies:{
-            type:"array",
-            items:{
-              type:"object",
-              properties:{
-                id:{type:"string"},
-                author:{type:"string"},
-                score:{type:"number"},
-                body:{type:"string"},
-                permalink:{type:"string"}
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-};
 
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));}
 function setStatus(text,count="",pct=5,error=false){
@@ -62,109 +23,130 @@ function setStatus(text,count="",pct=5,error=false){
 function log(text){const x=document.createElement("div");x.textContent="• "+text;$("log").appendChild(x);$("log").scrollTop=$("log").scrollHeight;}
 function flatten(nodes,out=[]){for(const c of nodes||[]){out.push(c);flatten(c.replies,out)}return out;}
 
-function normalizeData(d,sourceUrl){
-  const comments=Array.isArray(d.comments)?d.comments:[];
-  function clean(c){
-    return {
-      id:c.id||"",
-      parent_id:c.parent_id||"",
-      author:c.author||"[deleted]",
-      body:c.body||"",
-      score:Number.isFinite(Number(c.score))?Number(c.score):0,
-      permalink:c.permalink||"",
-      replies:Array.isArray(c.replies)?c.replies.map(clean):[]
-    };
-  }
-  return {
-    ok:true,
-    post:{
-      id:(sourceUrl.match(/\/comments\/([a-z0-9]+)/i)||[])[1]||"",
-      title:d.title||"Untitled Reddit post",
-      body:d.post_body||"",
-      author:d.author||"[unknown]",
-      subreddit:d.subreddit||"",
-      score:Number.isFinite(Number(d.score))?Number(d.score):0,
-      permalink:d.post_url||sourceUrl
-    },
-    comments:comments.map(clean)
-  };
+function redditInfo(raw){
+  const u=new URL(raw);
+  if(!/(^|\.)reddit\.com$/i.test(u.hostname)&&!/(^|\.)redd\.it$/i.test(u.hostname))
+    throw Error("Please enter a Reddit URL.");
+
+  const comments=u.pathname.match(/\/comments\/([a-z0-9]+)/i);
+  const share=u.pathname.match(/\/r\/([^/]+)\/s\/([a-z0-9]+)/i);
+
+  if(comments)return {kind:"comments",postId:comments[1],url:u};
+  if(share)return {kind:"share",subreddit:share[1],shareCode:share[2],url:u};
+  throw Error("Please paste a Reddit post URL or a Reddit /s/ share link.");
 }
 
-async function structuredReader(target){
-  const endpoint=JINA+target;
-  const schemaHeader=JSON.stringify(schema);
-  const instruction=`Extract the Reddit post from this page. Return ONLY the requested JSON object. Include the post title, subreddit, author, score, full post body, canonical post URL, and as many Reddit comments as are actually present in the fetched page. For each comment include author, score, body, permalink, and direct replies when visible. Do not invent comments or text. Preserve the exact comment text as closely as possible. If a value is unavailable, use an empty string or 0.`;
+/*
+ Turn:
+ /r/sub/comments/id/title/?foo=bar
+ into:
+ /r/sub/comments/id/title/.rss?limit=100
 
+ For /s/ links, Reddit is asked to resolve the share URL itself by requesting
+ the RSS representation of the share URL.
+*/
+function makeRSS(info){
+  if(info.kind==="share"){
+    return `https://www.reddit.com${info.url.pathname}.rss?limit=100`;
+  }
+
+  let path=info.url.pathname.replace(/\/+$/,"");
+  if(!/\.rss$/i.test(path))path+=".rss";
+  return `https://www.reddit.com${path}?limit=100`;
+}
+
+async function fetchRSS(target){
+  const proxied=PROXY+encodeURIComponent(target);
   const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),45000);
+  const timer=setTimeout(()=>controller.abort(),25000);
   try{
-    const r=await fetch(endpoint,{
-      method:"GET",
-      headers:{
-        "Accept":"application/json",
-        "x-respond-with":"readerlm-v2",
-        "x-json-schema":schemaHeader,
-        "x-instruction":instruction
-      },
-      signal:controller.signal
-    });
-    if(!r.ok)throw new Error(`Jina HTTP ${r.status}`);
+    const r=await fetch(proxied,{method:"GET",headers:{"Accept":"application/rss+xml, application/xml, text/xml, text/plain"}});
+    if(!r.ok)throw Error(`Proxy HTTP ${r.status}`);
     const text=await r.text();
+    if(!text.trim())throw Error("Empty RSS response.");
     return text;
   }finally{clearTimeout(timer)}
 }
 
-function parsePossibleJSON(text){
-  let t=String(text||"").trim();
-  try{return JSON.parse(t)}catch{}
-  const first=t.indexOf("{"),last=t.lastIndexOf("}");
-  if(first>=0&&last>first){
-    try{return JSON.parse(t.slice(first,last+1))}catch{}
-  }
-  return null;
+function textOf(el,tag){
+  const x=el.querySelector(tag);
+  return x?x.textContent.trim():"";
 }
-
-async function normalReader(target){
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),45000);
-  try{
-    const r=await fetch(JINA+target,{headers:{Accept:"text/plain"},signal:controller.signal});
-    if(!r.ok)throw new Error(`Jina HTTP ${r.status}`);
-    return await r.text();
-  }finally{clearTimeout(timer)}
+function decodeHTML(s){
+  const t=document.createElement("textarea");t.innerHTML=s;return t.value;
 }
+function parseRSS(xmlText,sourceUrl){
+  const parser=new DOMParser();
+  const doc=parser.parseFromString(xmlText,"application/xml");
+  if(doc.querySelector("parsererror"))throw Error("Reddit returned invalid RSS/XML.");
 
-function parseMarkdownFallback(text,sourceUrl){
+  const entries=[...doc.querySelectorAll("entry")];
+  if(!entries.length)throw Error("RSS feed contained no post/comments.");
+
   /*
-   Conservative fallback. We don't invent structure. We display the Reader
-   text as one "raw extraction" and also try to identify a title.
+   Reddit's post comments RSS commonly has one submission entry followed by
+   comment entries. We use the first entry as the post and the rest as comments.
   */
-  const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-  let title="";
-  for(const line of lines){
-    if(/^#\s+/.test(line)){title=line.replace(/^#+\s+/,"").trim();break}
-  }
-  if(!title && lines.length) title=lines[0].replace(/^\*+|\*+$/g,"").trim();
+  const first=entries[0];
+  const postTitle=textOf(first,"title");
+  const postLink=first.querySelector("link")?.getAttribute("href")||sourceUrl;
+  const author=textOf(first,"author name")||textOf(first,"author");
+  const content=decodeHTML(textOf(first,"content"));
 
+  let subreddit="";
+  const postMatch=postLink.match(/\/r\/([^/]+)/i);
+  if(postMatch)subreddit=postMatch[1];
+
+  const comments=[];
+  const byId=new Map();
+
+  for(let i=1;i<entries.length;i++){
+    const e=entries[i];
+    const link=e.querySelector("link")?.getAttribute("href")||"";
+    const id=(e.querySelector("id")?.textContent||"").trim();
+    const body=decodeHTML(textOf(e,"content"));
+    const a=textOf(e,"author name")||textOf(e,"author")||"[deleted]";
+    const c={
+      id:id||link,
+      parent_id:"",
+      author:a,
+      body:stripRSSHTML(body),
+      score:0,
+      permalink:link,
+      replies:[]
+    };
+    comments.push(c);byId.set(c.id,c);
+  }
+
+  /*
+   RSS does not expose the full Reddit tree reliably. Keep comments flat when
+   parent information is unavailable rather than inventing nesting.
+  */
   return {
     ok:true,
-    fallback:true,
+    rss:true,
     post:{
-      id:(sourceUrl.match(/\/comments\/([a-z0-9]+)/i)||[])[1]||"",
-      title:title||"Reddit extraction",
-      body:text,
-      author:"",
-      subreddit:"",
+      id:(postLink.match(/\/comments\/([a-z0-9]+)/i)||[])[1]||"",
+      title:stripRSSHTML(postTitle),
+      body:stripRSSHTML(content),
+      author,
+      subreddit,
       score:0,
-      permalink:sourceUrl
+      permalink:postLink
     },
-    comments:[]
+    comments
   };
+}
+
+function stripRSSHTML(s){
+  const div=document.createElement("div");
+  div.innerHTML=s;
+  return (div.textContent||div.innerText||s).trim();
 }
 
 function renderComment(c){
   return `<div class="comment">
-    <div class="comment-meta"><b>${esc(c.author||"[deleted]")}</b> · ${c.score??0} points</div>
+    <div class="comment-meta"><b>${esc(c.author||"[deleted]")}</b>${c.score?` · ${c.score} points`:""}</div>
     <div class="comment-body">${c.body?esc(c.body):'<span class="deleted">[deleted]</span>'}</div>
     ${c.replies?.length?`<div class="children">${c.replies.map(renderComment).join("")}</div>`:""}
   </div>`;
@@ -174,65 +156,49 @@ function render(data){
   currentData=data;
   const all=flatten(data.comments);
   $("results").hidden=false;$("actions").hidden=false;
-  $("commentCount").textContent=data.fallback
-    ?"Reader text returned"
-    :`${all.length.toLocaleString()} extracted`;
+  $("commentCount").textContent=`${all.length.toLocaleString()} returned by RSS`;
   $("post").innerHTML=`
     <div class="post-title">${esc(data.post.title)}</div>
-    <div class="meta">${data.post.subreddit?"r/"+esc(data.post.subreddit)+" · ":""}${data.post.author?"u/"+esc(data.post.author)+" · ":""}${data.post.score||0} points</div>
-    <div class="body">${data.post.body?esc(data.post.body):'<span class="deleted">[no post body]</span>'}</div>`;
-  if(data.fallback){
-    $("comments").innerHTML=`<div><b>Raw Reader content</b><p class="meta">The page was fetched successfully, but structured comment extraction was unavailable. You can still copy/download the returned data.</p><div class="raw">${esc(data.post.body)}</div></div>`;
-  }else{
-    $("comments").innerHTML=data.comments.length
-      ?data.comments.map(renderComment).join("")
-      :"<div>No structured comments were returned by the reader.</div>";
-  }
+    <div class="meta">r/${esc(data.post.subreddit||"")} · u/${esc(data.post.author||"[unknown]")}</div>
+    <div class="body">${data.post.body?esc(data.post.body):'<span class="deleted">[no post body in RSS]</span>'}</div>`;
+  $("comments").innerHTML=data.comments.length
+    ?data.comments.map(renderComment).join("")
+    :"<div>Reddit did not return comments in the RSS feed.</div>";
 }
 
 async function extract(){
   const raw=$("url").value.trim();
   $("results").hidden=true;$("actions").hidden=true;$("log").innerHTML="";
   if(!raw){setStatus("Paste a Reddit post URL first","",0,true);return}
-  let u;
-  try{u=new URL(raw)}catch{setStatus("Invalid URL.","",0,true);return}
-  if(!/(^|\.)reddit\.com$/i.test(u.hostname)&&!/(^|\.)redd\.it$/i.test(u.hostname)){
-    setStatus("Please enter a Reddit URL.","",0,true);return
-  }
+  let info;
+  try{info=redditInfo(raw)}catch(e){setStatus(e.message,"",0,true);return}
 
   $("extract").disabled=true;
   try{
-    setStatus("Opening Reddit through Reader…","",10);
-    log("Sending the Reddit URL to Jina Reader.");
-    if(/\/s\/[a-z0-9]+/i.test(u.pathname)) log("Reddit /s/ share link detected — Reader will follow the page redirect.");
+    setStatus("Preparing Reddit RSS feed…","",8);
+    log("GitHub-only mode: using Reddit's RSS representation.");
+    if(info.kind==="share")log("Reddit /s/ share link detected.");
 
-    setStatus("Extracting post and comments…","",35);
-    const rawResponse=await structuredReader(raw);
-    log("Reader returned a structured response.");
+    const target=makeRSS(info);
+    log("RSS target prepared.");
+    setStatus("Fetching Reddit RSS…","",25);
+    log("Requesting the RSS feed through the public CORS proxy.");
 
-    let parsed=parsePossibleJSON(rawResponse);
-    if(parsed && parsed.data && typeof parsed.data==="object") parsed=parsed.data;
+    const xml=await fetchRSS(target);
+    setStatus("Reading post and comments…","",55);
+    log("RSS response received.");
 
-    if(parsed && (parsed.title!==undefined || parsed.comments!==undefined)){
-      const result=normalizeData(parsed,raw);
-      render(result);
-      const total=flatten(result.comments).length;
-      setStatus("Done",`${total.toLocaleString()} comments extracted`,100);
-      log(`Finished — ${total.toLocaleString()} structured comments returned.`);
-    }else{
-      log("Structured response could not be parsed. Falling back to normal Reader text.");
-      setStatus("Fetching readable Reddit content…","",60);
-      const text=await normalReader(raw);
-      const fallback=parseMarkdownFallback(text,raw);
-      render(fallback);
-      setStatus("Done","Raw page data extracted",100);
-      log("The page data was extracted, but Reddit did not expose a structured comment list.");
-    }
+    const data=parseRSS(xml,raw);
+    render(data);
+
+    const total=flatten(data.comments).length;
+    setStatus("Done",`${total.toLocaleString()} comments returned`,100);
+    log(`Extraction complete — ${total.toLocaleString()} comments returned.`);
+    if(total===0)log("This Reddit RSS response did not include comments. RSS is intentionally a limited fallback.");
   }catch(e){
     console.error(e);
     setStatus("Extraction failed","",0,true);
-    if(e.name==="AbortError") log("Reader timed out after 45 seconds.");
-    else log(e.message||"Unknown error");
+    log(e.name==="AbortError"?"Request timed out after 25 seconds.":(e.message||"Unknown error"));
   }finally{$("extract").disabled=false}
 }
 
@@ -242,14 +208,9 @@ function download(name,text,type){
 }
 function csvEsc(v){return `"${String(v??"").replace(/"/g,'""')}"`}
 function makeCSV(d){
-  const rows=[["type","id","parent_id","author","score","permalink","body","depth"]];
-  rows.push(["post",d.post.id,"",d.post.author,d.post.score,d.post.permalink,d.post.body,""]);
-  const walk=(nodes,depth)=>{for(const c of nodes||[]){
-    rows.push(["comment",c.id,c.parent_id,c.author,c.score,c.permalink,c.body,depth]);
-    walk(c.replies,depth+1);
-  }};
-  walk(d.comments,0);
-  if(d.fallback) rows.push(["raw","","","","","","Reader returned raw content; see JSON export.",0]);
+  const rows=[["type","id","parent_id","author","score","permalink","body"]];
+  rows.push(["post",d.post.id,"",d.post.author,d.post.score,d.post.permalink,d.post.body]);
+  for(const c of d.comments)rows.push(["comment",c.id,c.parent_id,c.author,c.score,c.permalink,c.body]);
   return rows.map(r=>r.map(csvEsc).join(",")).join("\n");
 }
 
@@ -266,4 +227,4 @@ $("json").addEventListener("click",()=>currentData&&download(
 $("csv").addEventListener("click",()=>currentData&&download(
   `reddit-${currentData.post.id||"extract"}.csv`,makeCSV(currentData),"text/csv"
 ));
-console.log("Reddit Extractor GitHub-only final loaded.");
+console.log("Reddit Extractor RSS version loaded.");

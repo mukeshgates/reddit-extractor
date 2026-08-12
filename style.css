@@ -8,7 +8,7 @@ h1{font-size:38px;margin:0 0 8px;font-weight:750}.sub{margin:0 0 28px;color:#666
 .status{margin-top:18px;border:1px solid #e4e4e4;border-radius:10px;padding:15px 17px;background:#fafafa}
 .status-line{display:flex;justify-content:space-between;font-size:14px;font-weight:600}.bar{height:6px;background:#e8e8e8;border-radius:99px;margin-top:10px;overflow:hidden}
 .bar div{height:100%;width:3%;background:#ff4500;transition:width .25s ease}
-#log{margin-top:9px;max-height:125px;overflow:auto;font-size:12px;color:#666;line-height:1.7}
+#log{margin-top:9px;max-height:150px;overflow:auto;font-size:12px;color:#666;line-height:1.7}
 .actions{display:flex;gap:8px;margin:22px 0 8px}.actions button{border:1px solid #ddd;background:#fff;border-radius:7px;padding:9px 13px;cursor:pointer}
 .card{border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-top:15px}
 .post-title{font-size:24px;font-weight:750;margin-bottom:9px}.meta{font-size:13px;color:#777}
@@ -17,5 +17,4 @@ h1{font-size:38px;margin:0 0 8px;font-weight:750}.sub{margin:0 0 28px;color:#666
 .comment{padding:13px 0 13px 15px;border-left:2px solid #e6e6e6;margin:3px 0}
 .comment-meta{font-size:12px;color:#777}.comment-body{white-space:pre-wrap;line-height:1.5;margin-top:6px}.children{margin-left:18px}
 .deleted{color:#999;font-style:italic}.error{color:#b00020}
-.raw{white-space:pre-wrap;max-height:600px;overflow:auto;background:#fafafa;padding:15px;border-radius:8px;font-size:13px;line-height:1.5}
 @media(max-width:650px){.wrap{margin-top:35px}.search-row{flex-direction:column}.search-row button{height:45px}.actions{flex-wrap:wrap}}

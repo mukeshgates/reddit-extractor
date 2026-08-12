@@ -1,18 +1,21 @@
-# Reddit Extractor — GitHub-only final
+# Reddit Extractor — GitHub-only RSS version
 
-Upload/replace only:
-- `index.html`
-- `style.css`
-- `app.js`
+Replace:
+- index.html
+- style.css
+- app.js
 
-No Cloudflare and no Reddit credentials.
+No Cloudflare. No Reddit client ID. No Reddit secret. No Jina API key.
 
-This version uses Jina Reader as the single external fetch layer. Jina's Reader supports `r.jina.ai/<URL>` and documents ReaderLM-v2 structured extraction using `x-respond-with`, `x-json-schema`, and `x-instruction`.
+This version intentionally does NOT use Reddit's unauthenticated `.json` endpoints, because Reddit began blocking unauthenticated JSON access in 2026.
 
-The app sends the Reddit URL directly to Reader, so Reddit `/s/` share URLs do not need a separate redirect-decoding algorithm.
+Instead it uses Reddit's `.rss` representation of the post and requests it through CorsProxy.io so a GitHub Pages browser can read it despite CORS.
 
-If structured extraction works, the page displays post + comments and exports JSON/CSV.
+Supported input:
+- normal `/comments/<post-id>/...` Reddit links
+- Reddit `/r/subreddit/s/<share-code>` links
 
-If structured extraction is unavailable, the app falls back to the readable page content instead of showing a parsing error. This means you still get the data returned by Reader.
+Important compromise:
+RSS is a limited fallback. It can return the post and a limited set of comments, but it does NOT provide the complete Reddit comment tree the way the authenticated Data API can. Deleted/removed content is also unavailable.
 
-The free no-key Reader limit is currently documented by Jina as 20 requests/minute per IP. 
+CorsProxy.io currently documents a no-key free development tier for GitHub.io origins. Its public documentation says GitHub.io is a supported development origin. This is a third-party transport service, not a Reddit API credential.
