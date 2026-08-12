@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reddit Extractor</title>
-<link rel="stylesheet" href="./style.css?v=20260819">
+<link rel="stylesheet" href="./style.css?v=20260820">
 </head>
 <body>
 <main class="wrap">
@@ -14,6 +14,18 @@
   <div class="search-row">
     <input id="url" type="url" placeholder="https://www.reddit.com/r/.../comments/..." autocomplete="off">
     <button id="extract">Extract</button>
+  </div>
+
+  <div class="options">
+    <label>Comment sort
+      <select id="sort">
+        <option value="top">Top comments</option>
+        <option value="new">Newest comments</option>
+        <option value="controversial">Controversial comments</option>
+        <option value="old">Oldest comments</option>
+      </select>
+    </label>
+    <label class="check"><input id="extra" type="checkbox"> Try additional comment feeds</label>
   </div>
 
   <div id="status" class="status" hidden>
@@ -33,10 +45,13 @@
 
   <section id="results" hidden>
     <article id="post" class="card"></article>
-    <div class="comments-title"><h2>Comments</h2><span id="commentCount"></span></div>
+    <div class="comments-title">
+      <h2>Comments</h2>
+      <span id="commentCount"></span>
+    </div>
     <div id="comments" class="card"></div>
   </section>
 </main>
-<script src="./app.js?v=20260819"></script>
+<script src="./app.js?v=20260820"></script>
 </body>
 </html>

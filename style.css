@@ -1,14 +1,17 @@
 *{box-sizing:border-box}
 body{margin:0;background:#fff;color:#17181a;font-family:Arial,Helvetica,sans-serif}
 .wrap{width:min(1050px,calc(100% - 32px));margin:65px auto 80px}
-h1{font-size:38px;margin:0 0 8px;font-weight:750}.sub{margin:0 0 28px;color:#666}
+h1{font-size:38px;margin:0 0 8px;font-weight:750}.sub{margin:0 0 24px;color:#666}
 .search-row{display:flex;gap:10px}.search-row input{flex:1;min-width:0;border:1px solid #ccc;border-radius:8px;padding:14px 15px;font-size:15px;outline:none}
 .search-row input:focus{border-color:#ff4500}.search-row button{border:0;border-radius:8px;background:#ff4500;color:#fff;font-weight:700;padding:0 24px;font-size:15px;cursor:pointer}
 .search-row button:disabled{opacity:.6;cursor:wait}
+.options{display:flex;gap:18px;align-items:center;margin-top:12px;color:#555;font-size:13px}
+.options label{display:flex;align-items:center;gap:7px}.options select{border:1px solid #ccc;border-radius:6px;padding:6px 8px;background:#fff}
+.check input{accent-color:#ff4500}
 .status{margin-top:18px;border:1px solid #e4e4e4;border-radius:10px;padding:15px 17px;background:#fafafa}
 .status-line{display:flex;justify-content:space-between;font-size:14px;font-weight:600}.bar{height:6px;background:#e8e8e8;border-radius:99px;margin-top:10px;overflow:hidden}
 .bar div{height:100%;width:3%;background:#ff4500;transition:width .25s ease}
-#log{margin-top:9px;max-height:150px;overflow:auto;font-size:12px;color:#666;line-height:1.7}
+#log{margin-top:9px;max-height:170px;overflow:auto;font-size:12px;color:#666;line-height:1.7}
 .actions{display:flex;gap:8px;margin:22px 0 8px}.actions button{border:1px solid #ddd;background:#fff;border-radius:7px;padding:9px 13px;cursor:pointer}
 .card{border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-top:15px}
 .post-title{font-size:24px;font-weight:750;margin-bottom:9px}.meta{font-size:13px;color:#777}
@@ -17,4 +20,5 @@ h1{font-size:38px;margin:0 0 8px;font-weight:750}.sub{margin:0 0 28px;color:#666
 .comment{padding:13px 0 13px 15px;border-left:2px solid #e6e6e6;margin:3px 0}
 .comment-meta{font-size:12px;color:#777}.comment-body{white-space:pre-wrap;line-height:1.5;margin-top:6px}.children{margin-left:18px}
 .deleted{color:#999;font-style:italic}.error{color:#b00020}
-@media(max-width:650px){.wrap{margin-top:35px}.search-row{flex-direction:column}.search-row button{height:45px}.actions{flex-wrap:wrap}}
+.note{padding:10px 12px;border-radius:7px;background:#fff8e8;margin-bottom:12px;font-size:13px;color:#765900}
+@media(max-width:650px){.wrap{margin-top:35px}.search-row{flex-direction:column}.search-row button{height:45px}.options{align-items:flex-start;flex-direction:column}.actions{flex-wrap:wrap}}

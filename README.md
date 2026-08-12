@@ -1,21 +1,22 @@
-# Reddit Extractor — GitHub-only RSS version
+# Reddit Extractor V2 — GitHub only
 
 Replace:
 - index.html
 - style.css
 - app.js
 
-No Cloudflare. No Reddit client ID. No Reddit secret. No Jina API key.
+Features:
+- Reddit /comments links
+- Reddit /s/ share links
+- Top/New/Controversial/Old RSS sort selection
+- Optional "Try additional comment feeds" mode
+- Deduplicates comments from multiple feeds
+- JSON/CSV export
+- Live status
 
-This version intentionally does NOT use Reddit's unauthenticated `.json` endpoints, because Reddit began blocking unauthenticated JSON access in 2026.
-
-Instead it uses Reddit's `.rss` representation of the post and requests it through CorsProxy.io so a GitHub Pages browser can read it despite CORS.
-
-Supported input:
-- normal `/comments/<post-id>/...` Reddit links
-- Reddit `/r/subreddit/s/<share-code>` links
-
-Important compromise:
-RSS is a limited fallback. It can return the post and a limited set of comments, but it does NOT provide the complete Reddit comment tree the way the authenticated Data API can. Deleted/removed content is also unavailable.
-
-CorsProxy.io currently documents a no-key free development tier for GitHub.io origins. Its public documentation says GitHub.io is a supported development origin. This is a third-party transport service, not a Reddit API credential.
+Important limitations:
+- RSS is currently a constrained fallback. Reddit has tightened unauthenticated RSS rate limits; recent community reports indicate roughly one request per minute in some cases.
+- The optional additional-feed mode deliberately waits about 62 seconds between RSS requests. This can take several minutes.
+- RSS does not reliably expose comment karma, so this version cannot truthfully filter by an exact karma threshold.
+- "Top comments" is the closest GitHub-only option to "positive karma": Reddit's top sort prioritizes highly voted discussion, but RSS does not provide the actual score field.
+- This does not guarantee every comment or the complete nested comment tree.
